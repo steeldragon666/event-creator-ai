@@ -1,8 +1,6 @@
 import axios from "axios";
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-
 /**
  * Available image generation models on OpenRouter
  */
@@ -42,6 +40,8 @@ export async function generateImageWithOpenRouter(
     quality = "hd",
     style = "vivid",
   } = options;
+
+  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
   if (!OPENROUTER_API_KEY) {
     throw new Error("OPENROUTER_API_KEY environment variable is not set");

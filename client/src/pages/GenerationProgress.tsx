@@ -35,6 +35,13 @@ export default function GenerationProgress() {
     }
   );
 
+  const processNextJob = trpc.jobs.processNext.useMutation({
+    onSuccess: () => {
+      // Refresh the jobs list immediately when a job finishes processing
+      refetchJobs();
+    }
+  });
+
   const startGeneration = trpc.versions.startGeneration.useMutation({
     onSuccess: () => {
       toast.success("Generation started!");
@@ -50,11 +57,40 @@ export default function GenerationProgress() {
   };
 
   // Check if all jobs are complete
-  const allJobsComplete = jobs && jobs.every(job => 
+  const allJobsComplete = jobs && jobs.length > 0 && jobs.every(job => 
     job.status === "completed" || job.status === "failed"
   );
 
   const anyJobsFailed = jobs && jobs.some(job => job.status === "failed");
+
+  // Client-side polling to process jobs in serverless environments (like Vercel)
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    let isMounted = true;
+
+    const pollProcessNext = async () => {
+      if (isMounted && hasStartedGeneration && !allJobsComplete && !anyJobsFailed) {
+        try {
+          const res = await processNextJob.mutateAsync();
+          // If a job was processed, check again quickly. If not, wait longer.
+          const delay = res.processed ? 500 : 3000;
+          timeoutId = setTimeout(pollProcessNext, delay);
+        } catch (e) {
+          // Retry later on error
+          timeoutId = setTimeout(pollProcessNext, 5000);
+        }
+      }
+    };
+
+    if (hasStartedGeneration && !allJobsComplete && !anyJobsFailed) {
+      pollProcessNext();
+    }
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [hasStartedGeneration, allJobsComplete, anyJobsFailed]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {

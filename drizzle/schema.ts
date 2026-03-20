@@ -321,7 +321,10 @@ export const jobs = mysqlTable("jobs", {
     "GENERATE_ASSET_OPTIONS",
     "RENDER_TEMPLATE",
     "GENERATE_FINAL_ASSETS",
-    "EXPORT_ZIP"
+    "EXPORT_ZIP",
+    "GENERATE_BATCH_ASSETS",
+    "GENERATE_ROUND_VARIANTS",
+    "RESIZE_AND_COMPOSITE"
   ]).notNull(),
   
   // Related entities
@@ -377,3 +380,89 @@ export const linkedSources = mysqlTable("linkedSources", {
 
 export type LinkedSource = typeof linkedSources.$inferSelect;
 export type InsertLinkedSource = typeof linkedSources.$inferInsert;
+
+/**
+ * Batch generation configuration (designer intent before full composition generation)
+ */
+export const batchConfigs = mysqlTable("batchConfigs", {
+  id: int("id").autoincrement().primaryKey(),
+  campaignVersionId: int("campaignVersionId").notNull(),
+  selectedOptionId: int("selectedOptionId").notNull(), // The chosen base design
+
+  variationCount: int("variationCount").notNull().default(3),
+
+  // Platform selection for batch
+  platforms: json("platforms").$type<string[]>().notNull(),
+
+  // Ticket rounds config
+  ticketRounds: json("ticketRounds").$type<Array<{
+    roundNumber: number;
+    label: string;
+    status: "upcoming" | "active" | "completed";
+    bannerText?: string;
+    price?: string;
+    dateRange?: { start: string; end: string };
+  }>>().notNull(),
+
+  // Key info overrides
+  eventNameOverride: varchar("eventNameOverride", { length: 255 }),
+  customTagline: text("customTagline"),
+  ticketUrl: text("ticketUrl"),
+  ageRestriction: varchar("ageRestriction", { length: 100 }),
+  legalText: text("legalText"),
+  presentedBy: varchar("presentedBy", { length: 255 }),
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BatchConfig = typeof batchConfigs.$inferSelect;
+export type InsertBatchConfig = typeof batchConfigs.$inferInsert;
+
+/**
+ * Individual batch-generated assets ready for delivery
+ */
+export const batchAssets = mysqlTable("batchAssets", {
+  id: int("id").autoincrement().primaryKey(),
+  batchConfigId: int("batchConfigId").notNull(),
+  campaignVersionId: int("campaignVersionId").notNull(),
+
+  // Classification
+  ticketRound: int("ticketRound").notNull(),
+  platform: varchar("platform", { length: 50 }).notNull(),
+  variationNumber: int("variationNumber").notNull(),
+
+  // Storage
+  assetUrl: text("assetUrl").notNull(),
+  assetKey: text("assetKey").notNull(),
+  thumbnailUrl: text("thumbnailUrl"),
+
+  // Specs
+  width: int("width").notNull(),
+  height: int("height").notNull(),
+  format: varchar("format", { length: 20 }).notNull(),
+
+  // Overlay metadata (for regeneration possibilities)
+  overlayConfig: json("overlayConfig").$type<{
+    textElements: Array<{
+      type: "headline" | "date" | "venue" | "lineup" | "cta" | "legal" | "tagline" | "round_banner";
+      content: string;
+      position: { x: number; y: number };
+      style: { fontSize: number; fontWeight: string; color: string; opacity: number };
+    }>;
+    logoPositions: Array<{
+      logoKey: string;
+      position: { x: number; y: number; width: number; height: number };
+    }>;
+    colorShift: number; // hue rotation in degrees
+    backgroundOpacity: number;
+  }>(),
+
+  // Selection for download
+  isSelected: boolean("isSelected").default(true),
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BatchAsset = typeof batchAssets.$inferSelect;
+export type InsertBatchAsset = typeof batchAssets.$inferInsert;
+

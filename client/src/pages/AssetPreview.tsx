@@ -59,8 +59,8 @@ export default function AssetPreview() {
       return;
     }
 
-    // Navigate to export page
-    setLocation(`/app/campaigns/${campaignId}/v/${versionId}/export`);
+    // Navigate to customizer page
+    setLocation(`/app/campaigns/${campaignId}/v/${versionId}/customize`);
   };
 
   if (optionsLoading) {

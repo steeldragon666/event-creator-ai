@@ -29,7 +29,13 @@ import {
   InsertJob,
   linkedSources,
   LinkedSource,
-  InsertLinkedSource
+  InsertLinkedSource,
+  batchConfigs,
+  BatchConfig,
+  InsertBatchConfig,
+  batchAssets,
+  BatchAsset,
+  InsertBatchAsset
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -477,4 +483,60 @@ export async function getJobsByCampaignVersionId(campaignVersionId: number): Pro
   return db.select().from(jobs)
     .where(eq(jobs.campaignVersionId, campaignVersionId))
     .orderBy(desc(jobs.createdAt));
+}
+
+// ============================================
+// Batch Generation Operations
+// ============================================
+
+export async function createBatchConfig(config: InsertBatchConfig): Promise<BatchConfig> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(batchConfigs).values(config);
+  const insertedId = Number(result[0].insertId);
+  
+  const created = await db.select().from(batchConfigs).where(eq(batchConfigs.id, insertedId)).limit(1);
+  if (!created[0]) throw new Error("Failed to retrieve created batch config");
+  
+  return created[0];
+}
+
+export async function getBatchConfig(id: number): Promise<BatchConfig | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(batchConfigs).where(eq(batchConfigs.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getBatchConfigsByVersionId(campaignVersionId: number): Promise<BatchConfig[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db.select().from(batchConfigs)
+    .where(eq(batchConfigs.campaignVersionId, campaignVersionId))
+    .orderBy(desc(batchConfigs.createdAt));
+}
+
+export async function createBatchAsset(asset: InsertBatchAsset): Promise<BatchAsset> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(batchAssets).values(asset);
+  const insertedId = Number(result[0].insertId);
+  
+  const created = await db.select().from(batchAssets).where(eq(batchAssets.id, insertedId)).limit(1);
+  if (!created[0]) throw new Error("Failed to retrieve created batch asset");
+  
+  return created[0];
+}
+
+export async function getBatchAssets(batchConfigId: number): Promise<BatchAsset[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db.select().from(batchAssets)
+    .where(eq(batchAssets.batchConfigId, batchConfigId))
+    .orderBy(batchAssets.ticketRound, batchAssets.platform, batchAssets.variationNumber);
 }

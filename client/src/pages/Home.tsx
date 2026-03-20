@@ -35,15 +35,9 @@ export default function Home() {
 
           {/* CTA */}
           <div className="flex items-center justify-center gap-4">
-            {user ? (
-              <Button size="lg" onClick={() => window.location.href = "/app/campaigns"} className="gap-2">
-                Go to Campaigns
-              </Button>
-            ) : (
-              <Button size="lg" onClick={() => window.location.href = getLoginUrl()} className="gap-2">
-                Get Started
-              </Button>
-            )}
+            <Button size="lg" onClick={() => window.location.href = "/app/campaigns"} className="gap-2">
+              Get Started
+            </Button>
           </div>
 
           {/* Features */}

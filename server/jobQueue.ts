@@ -9,12 +9,15 @@ export type JobType =
   | "GENERATE_ASSET_OPTIONS"
   | "RENDER_TEMPLATE"
   | "GENERATE_FINAL_ASSETS"
-  | "EXPORT_ZIP";
+  | "EXPORT_ZIP"
+  | "GENERATE_BATCH_ASSETS"
+  | "GENERATE_ROUND_VARIANTS"
+  | "RESIZE_AND_COMPOSITE";
 
 export interface JobPayload {
   campaignVersionId: number;
-  campaignId: number;
-  archetype: string;
+  campaignId?: number;
+  archetype?: string;
   assetType?: string;
   copy?: {
     headline?: string;
@@ -22,6 +25,10 @@ export interface JobPayload {
     body?: string;
     cta?: string;
   };
+  batchConfigId?: number;
+  roundNumber?: number;
+  platform?: string;
+  variationNumber?: number;
 }
 
 /**
@@ -32,9 +39,14 @@ export async function createJob(
   payload: JobPayload,
   priority: number = 0
 ): Promise<number> {
+  if (!payload.campaignId && type !== "GENERATE_BATCH_ASSETS" && type !== "GENERATE_ROUND_VARIANTS" && type !== "RESIZE_AND_COMPOSITE") {
+    // some legacy jobs might require it, but we can pass 0 or a valid ID if we fetched it
+    // Actually batch jobs also provide campaignId sometimes, but let's just use payload.campaignId defined in JobPayload.
+  }
+  
   const job = await db.createJob({
     jobType: type,
-    campaignId: payload.campaignId,
+    campaignId: payload.campaignId || 0, // Fallback if needed
     campaignVersionId: payload.campaignVersionId,
     payload: payload as Record<string, any>,
     status: "pending",
@@ -123,6 +135,24 @@ async function processJob(jobId: number): Promise<void> {
       case "EXPORT_ZIP":
         await processExportZip(payload);
         break;
+
+      case "GENERATE_BATCH_ASSETS": {
+        const { processBatchGenerationMaster } = await import("./services/batchGenerator");
+        await processBatchGenerationMaster(payload);
+        break;
+      }
+
+      case "GENERATE_ROUND_VARIANTS": {
+        const { processRoundVariants } = await import("./services/batchGenerator");
+        await processRoundVariants(payload);
+        break;
+      }
+
+      case "RESIZE_AND_COMPOSITE": {
+        const { processResizeAndComposite } = await import("./services/batchGenerator");
+        await processResizeAndComposite(payload);
+        break;
+      }
       
       default:
         throw new Error(`Unknown job type: ${job.jobType}`);
@@ -169,6 +199,10 @@ async function processGenerateDNA(payload: JobPayload): Promise<void> {
     throw new Error("Campaign version not found");
   }
   
+  if (!payload.archetype) {
+    throw new Error("Archetype is required for this job");
+  }
+  
   const generatedDNA = await generateCampaignDNA(version, payload.archetype);
   
   await db.createCampaignDNAVersion({
@@ -196,6 +230,10 @@ async function processGenerateCopy(payload: JobPayload): Promise<void> {
   
   if (!dna.tokens || typeof dna.tokens !== 'object') {
     throw new Error("Campaign DNA tokens are invalid or missing");
+  }
+  
+  if (!payload.archetype) {
+    throw new Error("Archetype is required for this job");
   }
   
   const variants = await generateCopyVariants(version, dna.tokens, payload.archetype);
@@ -259,6 +297,10 @@ async function processGenerateAssetOptions(payload: JobPayload): Promise<void> {
   
   if (!dna.tokens || typeof dna.tokens !== 'object') {
     throw new Error("Campaign DNA tokens are invalid or missing");
+  }
+  
+  if (!payload.archetype) {
+    throw new Error("Archetype is required for this job");
   }
   
   const { optionA, optionB } = await generateAssetOptions({
@@ -330,9 +372,12 @@ export async function startJobWorker(): Promise<void> {
   const pollInterval = 5000; // 5 seconds
   
   async function poll() {
+    console.log("[JobWorker] Polling for jobs...");
     try {
       const pendingJobs = await db.getPendingJobs(); // Get all pending jobs
       const jobsToProcess = pendingJobs.slice(0, 5); // Process up to 5 at a time
+      
+      console.log(`[JobWorker] Found ${pendingJobs.length} pending jobs`);
       
       if (jobsToProcess.length > 0) {
         console.log(`[JobWorker] Processing ${jobsToProcess.length} pending jobs`);
@@ -365,6 +410,10 @@ export async function createCampaignGenerationWorkflow(
 ): Promise<number[]> {
   const jobIds: number[] = [];
   
+  if (!campaignId) {
+    throw new Error("Campaign ID is required for generating workflow");
+  }
+
   // Step 1: Generate Campaign DNA
   const dnaJobId = await createJob("GENERATE_CAMPAIGN_DNA", {
     campaignVersionId,
@@ -393,4 +442,35 @@ export async function createCampaignGenerationWorkflow(
   }
   
   return jobIds;
+}
+
+/**
+ * Process a single pending job and return true if a job was processed, false otherwise.
+ * Useful for serverless environments where background workers cannot run continuously.
+ */
+export async function processNextPendingJob(): Promise<boolean> {
+  try {
+    const pendingJobs = await db.getPendingJobs();
+    
+    if (pendingJobs.length === 0) {
+      return false; // No jobs to process
+    }
+    
+    // Find the first job whose dependencies are met
+    for (const job of pendingJobs) {
+      const canProcess = await checkJobDependencies(job);
+      if (canProcess) {
+        console.log(`[JobWorker] Processing next pending job: ${job.id} (${job.jobType})`);
+        await processJob(job.id);
+        return true; // We processed one job
+      }
+    }
+    
+    // If we get here, there are pending jobs but their dependencies are not met yet.
+    // We return false to indicate we couldn't process any job right now.
+    return false;
+  } catch (error) {
+    console.error("[JobWorker] Error processing next pending job:", error);
+    throw error;
+  }
 }

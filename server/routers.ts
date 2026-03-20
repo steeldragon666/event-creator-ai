@@ -8,9 +8,11 @@ import { generateCampaignDNA } from "./campaignDNA";
 import { generateCopyVariants } from "./copyGeneration";
 import { generateAssetOptions } from "./assetGeneration";
 import { generateZipExport } from "./zipExport";
+import { batchRouter } from "./routers/batch";
 
 export const appRouter = router({
   system: systemRouter,
+  batch: batchRouter,
   
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -501,6 +503,14 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return db.getJobById(input.id);
+      }),
+      
+    // Process next pending job
+    processNext: publicProcedure
+      .mutation(async () => {
+        const { processNextPendingJob } = await import("./jobQueue");
+        const processed = await processNextPendingJob();
+        return { success: true, processed };
       }),
   }),
 });

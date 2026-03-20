@@ -7,6 +7,8 @@ import NewCampaign from "@/pages/NewCampaign";
 import CampaignWizard from "@/pages/CampaignWizard";
 import GenerationProgress from "@/pages/GenerationProgress";
 import AssetPreview from "@/pages/AssetPreview";
+import AssetCustomizer from "@/pages/AssetCustomizer";
+import AssetDelivery from "@/pages/AssetDelivery";
 import ExportAssets from "@/pages/ExportAssets";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -21,6 +23,8 @@ function Router() {
       <Route path={"/app/campaigns/:id/wizard"} component={CampaignWizard} />
       <Route path={"/app/campaigns/:id/v/:vid/generate"} component={GenerationProgress} />
       <Route path={"/app/campaigns/:id/v/:vid/assets"} component={AssetPreview} />
+      <Route path={"/app/campaigns/:id/v/:vid/customize"} component={AssetCustomizer} />
+      <Route path={"/app/campaigns/:id/v/:vid/delivery"} component={AssetDelivery} />
       <Route path={"/app/campaigns/:id/v/:vid/export"} component={ExportAssets} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
